@@ -17,11 +17,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod axum_support;
+mod datagram;
 mod listener;
 mod split;
 mod stream;
 mod tonic_support;
 
+pub use datagram::VsockDatagram;
 pub use listener::{Incoming, VsockListener};
 pub use split::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 pub use stream::VsockStream;
