@@ -17,7 +17,7 @@
 use clap::{crate_authors, crate_version, App, Arg};
 use futures::StreamExt as _;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_vsock::{VsockListener, VsockAddr};
+use tokio_vsock::{VsockListener, VsockAddr, VsockDatagram};
 
 /// A simple Virtio socket server that uses Hyper to response to requests.
 #[tokio::main]
@@ -34,6 +34,13 @@ async fn main() -> Result<(), ()> {
                 .required(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("datagram")
+                .long("datagram")
+                .short("d")
+                .help("Use datagram for UDP communication")
+                .takes_value(false),
+        )
         .get_matches();
 
     let listen_port = matches
@@ -42,34 +49,59 @@ async fn main() -> Result<(), ()> {
         .parse::<u32>()
         .expect("port must be a valid integer");
 
+    let use_datagram = matches.is_present("datagram");
     let addr = VsockAddr::new(libc::VMADDR_CID_ANY, listen_port);
-    let listener = VsockListener::bind(addr).expect("unable to bind virtio listener");
 
-    println!("Listening for connections on port: {}", listen_port);
+    if use_datagram {
+        // Datagram (UDP) server
+        let socket = VsockDatagram::bind(addr).await.expect("unable to bind virtio datagram socket");
+        println!("Listening for datagram packets on port: {}", listen_port);
 
-    let mut incoming = listener.incoming();
-    while let Some(result) = incoming.next().await {
-        match result {
-            Ok(mut stream) => {
-                println!("Got connection ============");
-                tokio::spawn(async move {
-                    loop {
-                        let mut buf = vec![0u8; 5000];
-                        let len = stream.read(&mut buf).await.unwrap();
-
-                        if len == 0 {
-                            break;
-                        }
-
-                        buf.resize(len, 0);
-                        println!("Got data: {:?}", &buf);
-                        stream.write_all(&buf).await.unwrap();
+        let mut buf = vec![0u8; 4096];
+        loop {
+            match socket.recv_from(&mut buf).await {
+                Ok((len, sender_addr)) => {
+                    println!("Got {} bytes from {:?}: {:?}", len, sender_addr, &buf[..len]);
+                    // Echo the data back
+                    if let Err(e) = socket.send_to(&buf[..len], sender_addr).await {
+                        println!("Failed to echo datagram: {}", e);
                     }
-                });
+                }
+                Err(e) => {
+                    println!("Got datagram error: {:?}", e);
+                    return Err(());
+                }
             }
-            Err(e) => {
-                println!("Got error: {:?}", e);
-                return Err(());
+        }
+    } else {
+        // Stream (TCP) server
+        let listener = VsockListener::bind(addr).expect("unable to bind virtio listener");
+        println!("Listening for stream connections on port: {}", listen_port);
+
+        let mut incoming = listener.incoming();
+        while let Some(result) = incoming.next().await {
+            match result {
+                Ok(mut stream) => {
+                    println!("Got connection ============");
+                    tokio::spawn(async move {
+                        loop {
+                            let mut buf = vec![0u8; 5000];
+                            let len = stream.read(&mut buf).await.unwrap();
+
+                            if len == 0 {
+                                break;
+                            }
+
+                            buf.resize(len, 0);
+                            println!("Got data: {:?}", &buf);
+                            stream.write_all(&buf).await.unwrap();
+                        }
+                    });
+                }
+                Err(e) => {
+                    println!("Got error: {:?}", e);
+                    return Err(());
+                }
             }
         }
     }
