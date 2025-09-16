@@ -51,7 +51,14 @@ impl VsockDatagramSocket {
 
             // Convert VsockAddr to sockaddr_vm
             let mut sockaddr: sockaddr_vm = mem::zeroed();
-            sockaddr.svm_family = AF_VSOCK as u8;
+            #[cfg(target_os = "macos")]
+            {
+                sockaddr.svm_family = AF_VSOCK as u8;
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                sockaddr.svm_family = AF_VSOCK as u16;
+            }
             sockaddr.svm_port = addr.port();
             sockaddr.svm_cid = addr.cid();
 
@@ -75,7 +82,14 @@ impl VsockDatagramSocket {
     fn send_to(&self, buf: &[u8], addr: &VsockAddr) -> Result<usize> {
         unsafe {
             let mut sockaddr: sockaddr_vm = mem::zeroed();
-            sockaddr.svm_family = AF_VSOCK as u8;
+            #[cfg(target_os = "macos")]
+            {
+                sockaddr.svm_family = AF_VSOCK as u8;
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                sockaddr.svm_family = AF_VSOCK as u16;
+            }
             sockaddr.svm_port = addr.port();
             sockaddr.svm_cid = addr.cid();
 
@@ -125,7 +139,14 @@ impl VsockDatagramSocket {
     fn connect(&self, addr: &VsockAddr) -> Result<()> {
         unsafe {
             let mut sockaddr: sockaddr_vm = mem::zeroed();
-            sockaddr.svm_family = AF_VSOCK as u8;
+            #[cfg(target_os = "macos")]
+            {
+                sockaddr.svm_family = AF_VSOCK as u8;
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                sockaddr.svm_family = AF_VSOCK as u16;
+            }
             sockaddr.svm_port = addr.port();
             sockaddr.svm_cid = addr.cid();
 
